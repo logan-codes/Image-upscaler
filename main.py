@@ -46,4 +46,4 @@ with gr.Blocks(title="AI Image Upscaler") as demo:
     
     btn.click(fn=upscale, inputs=[input_img, scale_choice], outputs=output_img)
 
-demo.launch()
+demo.launch(server_name="0.0.0.0", server_port=7860)
