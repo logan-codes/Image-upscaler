@@ -1,53 +1,94 @@
+import os
+from pathlib import Path
+
 import gradio as gr
 import numpy as np
+from basicsr.archs.rrdbnet_arch import RRDBNet
 from PIL import Image
 from realesrgan import RealESRGANer
-from basicsr.archs.rrdbnet_arch import RRDBNet
-import os
 
-# Load model once at startup (not on every call)
-def load_model(scale=4):
+MODEL_FILENAME = "RealESRGAN_x4plus.pth"
+MODEL_SCALE = 4
+SUPPORTED_SCALES = (2, 4)
+
+
+def resolve_model_path() -> str:
+    project_root = Path(__file__).resolve().parent
+    candidate_paths = [project_root / "weights" / MODEL_FILENAME]
+
+    home_dir = os.environ.get("HOME")
+    if home_dir:
+        candidate_paths.append(Path(home_dir) / "weights" / MODEL_FILENAME)
+
+    for candidate in candidate_paths:
+        if candidate.exists():
+            return str(candidate)
+
+    checked_locations = ", ".join(str(path) for path in candidate_paths)
+    raise FileNotFoundError(
+        f"Could not find {MODEL_FILENAME}. Checked: {checked_locations}"
+    )
+
+
+def load_model():
     model = RRDBNet(
-        num_in_ch=3, num_out_ch=3,
-        num_feat=64, num_block=23, num_grow_ch=32, scale=scale
+        num_in_ch=3,
+        num_out_ch=3,
+        num_feat=64,
+        num_block=23,
+        num_grow_ch=32,
+        scale=MODEL_SCALE,
     )
-    model_dir = os.path.join(os.environ["HOME"], "weights")
-    os.makedirs(model_dir, exist_ok=True)
-
-    upsampler = RealESRGANer(
-        scale=scale,
-        model_path=os.path.join(model_dir, f"RealESRGAN_x{scale}.pth"),
+    return RealESRGANer(
+        scale=MODEL_SCALE,
+        model_path=resolve_model_path(),
         model=model,
-        half=False  # set True if GPU available
+        half=False,
     )
-    return upsampler
 
-upsampler_cache = {}
+
+upsampler_cache = None
+
+
+def get_upsampler():
+    global upsampler_cache
+    if upsampler_cache is None:
+        upsampler_cache = load_model()
+    return upsampler_cache
+
 
 def upscale(image: Image.Image, scale: int):
-    if scale not in upsampler_cache:
-        upsampler_cache[scale] = load_model(scale)
-    
-    upsampler = upsampler_cache[scale]
-    img_array = np.array(image)
-    output, _ = upsampler.enhance(img_array, outscale=scale)
+    if image is None:
+        raise gr.Error("Please upload an image first.")
+
+    if scale not in SUPPORTED_SCALES:
+        raise gr.Error(f"Unsupported upscale factor: {scale}")
+
+    upsampler = get_upsampler()
+    output, _ = upsampler.enhance(np.array(image), outscale=scale)
     return Image.fromarray(output)
 
-# Gradio UI
-with gr.Blocks(title="AI Image Upscaler") as demo:
-    gr.Markdown("## 🔍 AI Image Upscaler\nPowered by Real-ESRGAN")
-    
-    with gr.Row():
-        with gr.Column():
-            input_img = gr.Image(type="pil", label="Input Image")
-            scale_choice = gr.Radio(
-                choices=[2, 4], value=4, label="Upscale Factor"
-            )
-            btn = gr.Button("Upscale", variant="primary")
-        
-        with gr.Column():
-            output_img = gr.Image(type="pil", label="Upscaled Output")
-    
-    btn.click(fn=upscale, inputs=[input_img, scale_choice], outputs=output_img)
 
-demo.launch(server_name="0.0.0.0", server_port=7860)
+def build_demo():
+    with gr.Blocks(title="AI Image Upscaler") as app:
+        gr.Markdown("## 🔍 AI Image Upscaler\nPowered by Real-ESRGAN")
+
+        with gr.Row():
+            with gr.Column():
+                input_img = gr.Image(type="pil", label="Input Image")
+                scale_choice = gr.Radio(
+                    choices=list(SUPPORTED_SCALES), value=4, label="Upscale Factor"
+                )
+                btn = gr.Button("Upscale", variant="primary")
+
+            with gr.Column():
+                output_img = gr.Image(type="pil", label="Upscaled Output")
+
+        btn.click(fn=upscale, inputs=[input_img, scale_choice], outputs=output_img)
+    return app
+
+
+demo = build_demo()
+
+if __name__ == "__main__":
+    demo.launch(server_name="0.0.0.0", server_port=7860)
