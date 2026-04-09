@@ -6,12 +6,18 @@ FROM python:${PYTHON_VERSION}-slim as base
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Install system dependencies (FIX)
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-# Create a proper non-root user WITH home
+# Create non-root user
 ARG UID=10001
 RUN adduser \
     --disabled-password \
@@ -19,7 +25,6 @@ RUN adduser \
     --uid "${UID}" \
     appuser
 
-# Set correct HOME and cache
 ENV HOME=/home/appuser
 ENV UV_CACHE_DIR=/home/appuser/.cache/uv
 
@@ -37,7 +42,6 @@ COPY . .
 RUN --mount=type=cache,target=/home/appuser/.cache/uv \
     uv sync --frozen
 
-# Switch user
 USER appuser
 
 EXPOSE 7860
