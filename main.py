@@ -16,9 +16,8 @@ def load_model(scale=4):
 
     upsampler = RealESRGANer(
         scale=scale,
-        model_path=f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x{scale}plus.pth",
+        model_path=os.path.join(model_dir, f"RealESRGAN_x{scale}.pth"),
         model=model,
-        model_dir=model_dir,
         half=False  # set True if GPU available
     )
     return upsampler
