@@ -1,6 +1,3 @@
----
-title: AI Image Upscaler
-emoji: 🔍
 
 # 🔍 AI Image Upscaler
 
